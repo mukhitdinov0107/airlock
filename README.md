@@ -12,8 +12,8 @@ python3 -m venv .venv
 ./run.sh
 ```
 
-The event API is now available at `http://127.0.0.1:8000`. The frontend
-teammate's `dashboard/index.html` will be served at the same address.
+The live event dashboard and API are now available at
+`http://127.0.0.1:8000`.
 
 Verify the complete MCP chain:
 
@@ -66,7 +66,8 @@ value in each proxy's environment. Airlock sends it as a bearer token.
 
 ## Frontend handoff
 
-The frontend owns `dashboard/index.html` and can build a separate landing page.
+`dashboard/index.html` contains the live event UI. The frontend teammate can
+build the separate landing page without touching the enforcement dashboard.
 The WebSocket and event payload contract is documented in
 [`dashboard/README.md`](dashboard/README.md). No frontend build step is
 required for the MVP.

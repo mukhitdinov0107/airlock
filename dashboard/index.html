@@ -1,0 +1,1112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Live policy decisions from the Airlock MCP security checkpoint."
+    />
+    <title>Airlock — Live policy feed</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --canvas: #e9edef;
+        --surface: #f8faf9;
+        --surface-raised: #ffffff;
+        --ink: #142126;
+        --muted: #647177;
+        --faint: #8b969a;
+        --line: #cdd5d7;
+        --line-strong: #aebabc;
+        --accent: #0e5d6d;
+        --accent-soft: #dcebed;
+        --allow: #176342;
+        --allow-soft: #e3f0e9;
+        --block: #a52d2d;
+        --block-soft: #f6e6e3;
+        --flag: #895b0b;
+        --flag-soft: #f7edd4;
+        --shadow: 0 18px 50px rgb(33 49 54 / 8%);
+        --sans:
+          Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        --mono:
+          "SFMono-Regular", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 320px;
+        background: var(--canvas);
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--ink);
+        background:
+          linear-gradient(rgb(255 255 255 / 34%) 1px, transparent 1px),
+          var(--canvas);
+        background-size: 100% 48px;
+        font-family: var(--sans);
+        font-size: 15px;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      button,
+      summary {
+        font: inherit;
+      }
+
+      button:focus-visible,
+      summary:focus-visible {
+        outline: 3px solid rgb(14 93 109 / 28%);
+        outline-offset: 3px;
+      }
+
+      .topbar {
+        position: sticky;
+        z-index: 10;
+        top: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 64px;
+        padding: 0 32px;
+        border-bottom: 1px solid var(--line-strong);
+        background: rgb(248 250 249 / 92%);
+        backdrop-filter: blur(16px);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        letter-spacing: -0.02em;
+        font-weight: 750;
+      }
+
+      .brand-mark {
+        position: relative;
+        width: 28px;
+        height: 28px;
+        border: 2px solid var(--ink);
+        background:
+          linear-gradient(
+            90deg,
+            transparent 0 7px,
+            var(--ink) 7px 9px,
+            transparent 9px 17px,
+            var(--ink) 17px 19px,
+            transparent 19px
+          );
+      }
+
+      .brand-mark::after {
+        position: absolute;
+        top: 12px;
+        right: -5px;
+        left: -5px;
+        height: 2px;
+        background: var(--block);
+        content: "";
+      }
+
+      .brand-context {
+        margin-left: 4px;
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .connection {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+
+      .connection-dot {
+        width: 9px;
+        height: 9px;
+        border: 2px solid var(--surface);
+        border-radius: 50%;
+        background: var(--faint);
+        box-shadow: 0 0 0 1px var(--line-strong);
+      }
+
+      .connection[data-state="live"] .connection-dot {
+        background: var(--allow);
+        box-shadow:
+          0 0 0 1px var(--allow),
+          0 0 0 5px rgb(23 99 66 / 10%);
+      }
+
+      .connection[data-state="offline"] .connection-dot {
+        background: var(--block);
+        box-shadow:
+          0 0 0 1px var(--block),
+          0 0 0 5px rgb(165 45 45 / 10%);
+      }
+
+      .shell {
+        width: min(1440px, 100%);
+        margin: 0 auto;
+        padding: 46px 32px 72px;
+      }
+
+      .intro {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 32px;
+        margin-bottom: 26px;
+      }
+
+      .eyebrow {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 0 0 12px;
+        color: var(--accent);
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow::before {
+        width: 24px;
+        height: 2px;
+        background: var(--accent);
+        content: "";
+      }
+
+      h1 {
+        max-width: 760px;
+        margin: 0;
+        font-size: clamp(34px, 5vw, 62px);
+        font-weight: 720;
+        letter-spacing: -0.055em;
+        line-height: 0.98;
+      }
+
+      .intro-copy {
+        max-width: 390px;
+        margin: 0 0 3px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: 1.25fr repeat(3, 1fr);
+        overflow: hidden;
+        margin-bottom: 28px;
+        border: 1px solid var(--line-strong);
+        background: var(--surface-raised);
+        box-shadow: var(--shadow);
+      }
+
+      .metric {
+        min-height: 112px;
+        padding: 20px 22px;
+        border-right: 1px solid var(--line);
+      }
+
+      .metric:last-child {
+        border-right: 0;
+      }
+
+      .metric-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 18px;
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+      }
+
+      .metric-value {
+        font-family: var(--mono);
+        font-size: 31px;
+        font-variant-numeric: tabular-nums;
+        font-weight: 650;
+        letter-spacing: -0.04em;
+      }
+
+      .metric-total .metric-value {
+        color: var(--accent);
+      }
+
+      .metric-allow .metric-value {
+        color: var(--allow);
+      }
+
+      .metric-block .metric-value {
+        color: var(--block);
+      }
+
+      .metric-flag .metric-value {
+        color: var(--flag);
+      }
+
+      .metric-mark {
+        width: 7px;
+        height: 7px;
+        background: currentColor;
+      }
+
+      .feed-panel {
+        overflow: hidden;
+        border: 1px solid var(--line-strong);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+
+      .feed-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        min-height: 70px;
+        padding: 14px 18px 14px 22px;
+        border-bottom: 1px solid var(--line-strong);
+      }
+
+      .feed-title {
+        margin: 0;
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      .feed-subtitle {
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 11px;
+      }
+
+      .filters {
+        display: flex;
+        padding: 3px;
+        border: 1px solid var(--line);
+        background: var(--canvas);
+      }
+
+      .filter {
+        min-height: 32px;
+        padding: 0 12px;
+        border: 0;
+        color: var(--muted);
+        background: transparent;
+        cursor: pointer;
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 650;
+      }
+
+      .filter:hover {
+        color: var(--ink);
+      }
+
+      .filter[aria-pressed="true"] {
+        color: var(--ink);
+        background: var(--surface-raised);
+        box-shadow: 0 1px 4px rgb(33 49 54 / 12%);
+      }
+
+      .feed-columns,
+      .event-main {
+        display: grid;
+        grid-template-columns: 106px minmax(125px, 0.8fr) minmax(150px, 1fr) 94px minmax(260px, 2.2fr);
+        gap: 18px;
+        align-items: center;
+      }
+
+      .feed-columns {
+        min-height: 38px;
+        padding: 0 24px;
+        border-bottom: 1px solid var(--line);
+        color: var(--faint);
+        font-family: var(--mono);
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .event-list {
+        min-height: 220px;
+      }
+
+      .event {
+        position: relative;
+        border-bottom: 1px solid var(--line);
+        background: var(--surface-raised);
+      }
+
+      .event:last-child {
+        border-bottom: 0;
+      }
+
+      .event::before {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: 4px;
+        background: var(--accent);
+        content: "";
+      }
+
+      .event[data-verdict="allow"]::before {
+        background: var(--allow);
+      }
+
+      .event[data-verdict="block"]::before {
+        background: var(--block);
+      }
+
+      .event[data-verdict="flag"]::before {
+        background: var(--flag);
+      }
+
+      .event.is-new {
+        animation: event-arrival 420ms cubic-bezier(0.2, 0.75, 0.25, 1);
+      }
+
+      .event-main {
+        min-height: 76px;
+        padding: 14px 24px;
+      }
+
+      .event-time,
+      .event-agent,
+      .event-tool {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .event-time {
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .event-agent {
+        font-size: 13px;
+        font-weight: 680;
+      }
+
+      .event-tool {
+        color: var(--accent);
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .verdict {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: fit-content;
+        min-width: 76px;
+        height: 28px;
+        border: 1px solid currentColor;
+        color: var(--accent);
+        background: var(--accent-soft);
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .verdict[data-verdict="allow"] {
+        color: var(--allow);
+        background: var(--allow-soft);
+      }
+
+      .verdict[data-verdict="block"] {
+        color: var(--block);
+        background: var(--block-soft);
+      }
+
+      .verdict[data-verdict="flag"] {
+        color: var(--flag);
+        background: var(--flag-soft);
+      }
+
+      .event-reason {
+        min-width: 0;
+      }
+
+      .reason-text {
+        margin: 0;
+        line-height: 1.42;
+      }
+
+      .rule-id {
+        margin: 5px 0 0;
+        color: var(--faint);
+        font-family: var(--mono);
+        font-size: 10px;
+      }
+
+      .event-details {
+        margin: 0 24px 14px;
+        padding-left: calc(106px + 18px);
+      }
+
+      .event-details summary {
+        width: fit-content;
+        color: var(--muted);
+        cursor: pointer;
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 650;
+        list-style: none;
+      }
+
+      .event-details summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .event-details summary::before {
+        display: inline-block;
+        width: 14px;
+        color: var(--faint);
+        content: "+";
+      }
+
+      .event-details[open] summary::before {
+        content: "−";
+      }
+
+      .args-preview {
+        overflow: auto;
+        margin: 10px 0 2px;
+        padding: 12px 14px;
+        border-left: 2px solid var(--line-strong);
+        color: #34454b;
+        background: var(--canvas);
+        font-family: var(--mono);
+        font-size: 11px;
+        line-height: 1.55;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .empty {
+        display: grid;
+        min-height: 260px;
+        place-items: center;
+        padding: 40px 24px;
+        text-align: center;
+      }
+
+      .empty[hidden] {
+        display: none;
+      }
+
+      .empty-gate {
+        position: relative;
+        width: 76px;
+        height: 44px;
+        margin: 0 auto 22px;
+        border: 2px solid var(--line-strong);
+        border-bottom: 0;
+      }
+
+      .empty-gate::after {
+        position: absolute;
+        top: 20px;
+        right: -14px;
+        left: -14px;
+        height: 2px;
+        background: var(--accent);
+        content: "";
+      }
+
+      .empty-title {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .empty-copy {
+        max-width: 390px;
+        margin: 8px auto 0;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .footer-note {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        margin-top: 16px;
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 10px;
+      }
+
+      @keyframes event-arrival {
+        from {
+          opacity: 0;
+          transform: translateY(-8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @media (max-width: 940px) {
+        .intro {
+          display: block;
+        }
+
+        .intro-copy {
+          margin-top: 20px;
+        }
+
+        .metrics {
+          grid-template-columns: repeat(2, 1fr);
+        }
+
+        .metric:nth-child(2) {
+          border-right: 0;
+        }
+
+        .metric:nth-child(-n + 2) {
+          border-bottom: 1px solid var(--line);
+        }
+
+        .feed-columns {
+          display: none;
+        }
+
+        .event-main {
+          grid-template-columns: 90px 1fr auto;
+          gap: 10px 16px;
+          padding: 17px 20px;
+        }
+
+        .event-agent {
+          grid-column: 2;
+          grid-row: 1;
+        }
+
+        .event-tool {
+          grid-column: 2;
+          grid-row: 2;
+        }
+
+        .verdict {
+          grid-column: 3;
+          grid-row: 1 / span 2;
+        }
+
+        .event-reason {
+          grid-column: 1 / -1;
+          padding-top: 8px;
+        }
+
+        .event-details {
+          margin-right: 20px;
+          margin-left: 20px;
+          padding-left: 106px;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .topbar {
+          min-height: 58px;
+          padding: 0 18px;
+        }
+
+        .brand-context {
+          display: none;
+        }
+
+        .connection-label {
+          position: absolute;
+          overflow: hidden;
+          width: 1px;
+          height: 1px;
+          clip: rect(0 0 0 0);
+          white-space: nowrap;
+          clip-path: inset(50%);
+        }
+
+        .shell {
+          padding: 32px 16px 48px;
+        }
+
+        h1 {
+          font-size: 40px;
+        }
+
+        .metrics {
+          grid-template-columns: repeat(2, 1fr);
+        }
+
+        .metric {
+          min-height: 96px;
+          padding: 16px;
+        }
+
+        .metric-value {
+          font-size: 26px;
+        }
+
+        .feed-toolbar {
+          align-items: flex-start;
+          flex-direction: column;
+          padding: 16px;
+        }
+
+        .filters {
+          width: 100%;
+        }
+
+        .filter {
+          flex: 1;
+          padding: 0 6px;
+        }
+
+        .event-main {
+          grid-template-columns: 1fr auto;
+        }
+
+        .event-time {
+          grid-column: 1;
+          grid-row: 1;
+        }
+
+        .event-agent {
+          grid-column: 1;
+          grid-row: 2;
+        }
+
+        .event-tool {
+          grid-column: 1;
+          grid-row: 3;
+        }
+
+        .verdict {
+          grid-column: 2;
+          grid-row: 1 / span 3;
+        }
+
+        .event-reason {
+          grid-column: 1 / -1;
+        }
+
+        .event-details {
+          margin-left: 20px;
+          padding-left: 0;
+        }
+
+        .footer-note {
+          display: block;
+          line-height: 1.7;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand" aria-label="Airlock">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>Airlock</span>
+        <span class="brand-context">MCP checkpoint</span>
+      </div>
+      <div
+        class="connection"
+        id="connection"
+        data-state="connecting"
+        role="status"
+        aria-live="polite"
+      >
+        <span class="connection-dot" aria-hidden="true"></span>
+        <span class="connection-label" id="connection-label">Connecting</span>
+      </div>
+    </header>
+
+    <main class="shell">
+      <section class="intro" aria-labelledby="page-title">
+        <div>
+          <p class="eyebrow">Enforcement active</p>
+          <h1 id="page-title">Live policy decisions</h1>
+        </div>
+        <p class="intro-copy">
+          Every tool call is inspected before execution. Allowed calls continue
+          upstream; blocked calls never touch the protected tool.
+        </p>
+      </section>
+
+      <section class="metrics" aria-label="Decision totals">
+        <div class="metric metric-total">
+          <div class="metric-label">
+            Inspected
+            <span class="metric-mark" aria-hidden="true"></span>
+          </div>
+          <div class="metric-value" id="count-total">0</div>
+        </div>
+        <div class="metric metric-allow">
+          <div class="metric-label">
+            Allowed
+            <span class="metric-mark" aria-hidden="true"></span>
+          </div>
+          <div class="metric-value" id="count-allow">0</div>
+        </div>
+        <div class="metric metric-block">
+          <div class="metric-label">
+            Blocked
+            <span class="metric-mark" aria-hidden="true"></span>
+          </div>
+          <div class="metric-value" id="count-block">0</div>
+        </div>
+        <div class="metric metric-flag">
+          <div class="metric-label">
+            Flagged
+            <span class="metric-mark" aria-hidden="true"></span>
+          </div>
+          <div class="metric-value" id="count-flag">0</div>
+        </div>
+      </section>
+
+      <section class="feed-panel" aria-labelledby="feed-title">
+        <div class="feed-toolbar">
+          <div>
+            <h2 class="feed-title" id="feed-title">Decision log</h2>
+            <p class="feed-subtitle">Newest activity appears first</p>
+          </div>
+          <div class="filters" role="group" aria-label="Filter decisions">
+            <button class="filter" type="button" data-filter="all" aria-pressed="true">
+              All
+            </button>
+            <button class="filter" type="button" data-filter="allow" aria-pressed="false">
+              Allowed
+            </button>
+            <button class="filter" type="button" data-filter="block" aria-pressed="false">
+              Blocked
+            </button>
+            <button class="filter" type="button" data-filter="flag" aria-pressed="false">
+              Flagged
+            </button>
+          </div>
+        </div>
+
+        <div class="feed-columns" aria-hidden="true">
+          <span>Time</span>
+          <span>Agent</span>
+          <span>Tool</span>
+          <span>Decision</span>
+          <span>Reason</span>
+        </div>
+
+        <div class="event-list" id="event-list" aria-live="polite"></div>
+
+        <div class="empty" id="empty-state">
+          <div>
+            <div class="empty-gate" aria-hidden="true"></div>
+            <p class="empty-title" id="empty-title">Waiting for MCP traffic</p>
+            <p class="empty-copy" id="empty-copy">
+              Tool calls will appear here as soon as an agent connects through
+              Airlock.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <div class="footer-note">
+        <span>Arguments are redacted before telemetry leaves the proxy.</span>
+        <span id="clock">Local time —:—:—</span>
+      </div>
+    </main>
+
+    <script>
+      (() => {
+        "use strict";
+
+        const state = {
+          events: [],
+          filter: "all",
+          reconnectDelay: 1000,
+          socket: null,
+        };
+
+        const elements = {
+          connection: document.querySelector("#connection"),
+          connectionLabel: document.querySelector("#connection-label"),
+          eventList: document.querySelector("#event-list"),
+          emptyState: document.querySelector("#empty-state"),
+          emptyTitle: document.querySelector("#empty-title"),
+          emptyCopy: document.querySelector("#empty-copy"),
+          total: document.querySelector("#count-total"),
+          allow: document.querySelector("#count-allow"),
+          block: document.querySelector("#count-block"),
+          flag: document.querySelector("#count-flag"),
+          filters: [...document.querySelectorAll(".filter")],
+          clock: document.querySelector("#clock"),
+        };
+
+        const timeFormatter = new Intl.DateTimeFormat(undefined, {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        });
+
+        function setConnection(connectionState, label) {
+          elements.connection.dataset.state = connectionState;
+          elements.connectionLabel.textContent = label;
+        }
+
+        function updateClock() {
+          elements.clock.textContent = `Local time ${timeFormatter.format(new Date())}`;
+        }
+
+        function formatTime(value) {
+          const date = new Date(value);
+          return Number.isNaN(date.valueOf()) ? "Unknown" : timeFormatter.format(date);
+        }
+
+        function prettyArguments(value) {
+          try {
+            return JSON.stringify(JSON.parse(value), null, 2);
+          } catch {
+            return value || "{}";
+          }
+        }
+
+        function createTextElement(tag, className, text) {
+          const element = document.createElement(tag);
+          element.className = className;
+          element.textContent = text;
+          return element;
+        }
+
+        function createEventRow(event, isNew = false) {
+          const article = document.createElement("article");
+          article.className = `event${isNew ? " is-new" : ""}`;
+          article.dataset.verdict = event.verdict;
+
+          const main = document.createElement("div");
+          main.className = "event-main";
+
+          const time = createTextElement(
+            "time",
+            "event-time",
+            formatTime(event.time),
+          );
+          time.dateTime = event.time;
+          time.title = event.time;
+
+          const agent = createTextElement(
+            "span",
+            "event-agent",
+            event.agent_id || "unknown-agent",
+          );
+          agent.title = event.agent_id || "unknown-agent";
+
+          const tool = createTextElement(
+            "code",
+            "event-tool",
+            event.tool_name || "unknown_tool",
+          );
+          tool.title = event.tool_name || "unknown_tool";
+
+          const verdict = createTextElement(
+            "span",
+            "verdict",
+            event.verdict || "unknown",
+          );
+          verdict.dataset.verdict = event.verdict;
+
+          const reason = document.createElement("div");
+          reason.className = "event-reason";
+          reason.append(
+            createTextElement(
+              "p",
+              "reason-text",
+              event.reason || "No reason supplied.",
+            ),
+          );
+          if (event.rule_id) {
+            reason.append(
+              createTextElement("p", "rule-id", `Rule ${event.rule_id}`),
+            );
+          }
+
+          main.append(time, agent, tool, verdict, reason);
+
+          const details = document.createElement("details");
+          details.className = "event-details";
+          const summary = document.createElement("summary");
+          summary.textContent = "Sanitized arguments";
+          const preview = createTextElement(
+            "pre",
+            "args-preview",
+            prettyArguments(event.args_preview),
+          );
+          details.append(summary, preview);
+
+          article.append(main, details);
+          return article;
+        }
+
+        function updateCounts() {
+          const counts = state.events.reduce(
+            (result, event) => {
+              if (Object.hasOwn(result, event.verdict)) {
+                result[event.verdict] += 1;
+              }
+              return result;
+            },
+            { allow: 0, block: 0, flag: 0 },
+          );
+
+          elements.total.textContent = String(state.events.length);
+          elements.allow.textContent = String(counts.allow);
+          elements.block.textContent = String(counts.block);
+          elements.flag.textContent = String(counts.flag);
+        }
+
+        function renderEvents(newestEvent = null) {
+          const visibleEvents =
+            state.filter === "all"
+              ? state.events
+              : state.events.filter((event) => event.verdict === state.filter);
+
+          elements.eventList.replaceChildren(
+            ...visibleEvents.map((event) =>
+              createEventRow(event, event === newestEvent),
+            ),
+          );
+
+          const hasEvents = visibleEvents.length > 0;
+          elements.emptyState.hidden = hasEvents;
+
+          if (!hasEvents && state.events.length > 0) {
+            elements.emptyTitle.textContent = "No matching decisions";
+            elements.emptyCopy.textContent =
+              "Choose another filter to inspect the captured activity.";
+          } else {
+            elements.emptyTitle.textContent = "Waiting for MCP traffic";
+            elements.emptyCopy.textContent =
+              "Tool calls will appear here as soon as an agent connects through Airlock.";
+          }
+
+          updateCounts();
+        }
+
+        function acceptSnapshot(events) {
+          state.events = Array.isArray(events) ? [...events].reverse() : [];
+          renderEvents();
+        }
+
+        function acceptEvent(event) {
+          state.events.unshift(event);
+          state.events = state.events.slice(0, 500);
+          renderEvents(event);
+        }
+
+        function handleMessage(message) {
+          let payload;
+          try {
+            payload = JSON.parse(message.data);
+          } catch {
+            return;
+          }
+
+          if (payload.type === "snapshot") {
+            acceptSnapshot(payload.events);
+          } else if (payload.type === "event" && payload.event) {
+            acceptEvent(payload.event);
+          }
+        }
+
+        function websocketUrl() {
+          const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+          return `${protocol}//${window.location.host}/ws`;
+        }
+
+        function connect() {
+          setConnection("connecting", "Connecting");
+          const socket = new WebSocket(websocketUrl());
+          state.socket = socket;
+
+          socket.addEventListener("open", () => {
+            state.reconnectDelay = 1000;
+            setConnection("live", "Live");
+          });
+
+          socket.addEventListener("message", handleMessage);
+
+          socket.addEventListener("close", () => {
+            if (state.socket !== socket) return;
+            setConnection("offline", "Reconnecting");
+            window.setTimeout(connect, state.reconnectDelay);
+            state.reconnectDelay = Math.min(state.reconnectDelay * 2, 15000);
+          });
+
+          socket.addEventListener("error", () => {
+            socket.close();
+          });
+        }
+
+        elements.filters.forEach((button) => {
+          button.addEventListener("click", () => {
+            state.filter = button.dataset.filter;
+            elements.filters.forEach((candidate) => {
+              candidate.setAttribute(
+                "aria-pressed",
+                String(candidate === button),
+              );
+            });
+            renderEvents();
+          });
+        });
+
+        updateClock();
+        window.setInterval(updateClock, 1000);
+        renderEvents();
+        connect();
+      })();
+    </script>
+  </body>
+</html>
