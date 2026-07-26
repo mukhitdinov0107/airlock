@@ -1,0 +1,15 @@
+{
+  "name": "airlock",
+  "private": true,
+  "scripts": {
+    "dev": "hexclave dev --config-file ./hexclave.config.ts -- ./run.sh",
+    "dev:airlock": "./run.sh",
+    "hexclave": "hexclave"
+  },
+  "dependencies": {
+    "@hexclave/js": "^1.0.67"
+  },
+  "devDependencies": {
+    "@hexclave/cli": "^1.0.67"
+  }
+}

@@ -8,6 +8,10 @@
         "AIRLOCK_WORKSPACE": "${workspaceFolder}/demo/workspace_a",
         "AIRLOCK_EVENT_URL": "http://127.0.0.1:8000/api/events"
       }
+    },
+    "hexclave": {
+      "type": "http",
+      "url": "https://mcp.hexclave.com/mcp"
     }
   }
 }

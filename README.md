@@ -151,10 +151,15 @@ git clone https://github.com/mukhitdinov0107/airlock.git
 cd airlock
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-./run.sh
+npm install
+npm run dev
 ```
 
 Open the live dashboard at [http://127.0.0.1:8000](http://127.0.0.1:8000).
+The first run opens Hexclave's local onboarding for the enterprise Teams, RBAC,
+team API Keys, and Analytics configuration in `hexclave.config.ts`. Use
+`npm run dev:airlock` only when you intentionally want to run Airlock without
+the Hexclave development environment.
 
 In a second terminal, verify the complete MCP path:
 
