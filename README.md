@@ -88,6 +88,10 @@ For a hosted event hub:
 HOST=0.0.0.0 PORT="${PORT:-8000}" AIRLOCK_EVENT_TOKEN="<random-token>" ./run.sh
 ```
 
+[`render.yaml`](render.yaml) provides a ready-to-deploy Render web service.
+Set `AIRLOCK_EVENT_TOKEN` in Render, then copy that value and the deployed
+`https://<service>/api/events` URL into both local MCP configurations.
+
 The proxy enforces policy even if telemetry delivery fails.
 
 ## Development boundaries

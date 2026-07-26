@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: airlock-event-hub
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn airlock.dashboard:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.5
+      - key: AIRLOCK_EVENT_TOKEN
+        sync: false
