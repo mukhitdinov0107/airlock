@@ -1,0 +1,1282 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Airlock — Security Operations</title>
+<style>
+/* ==========================================================================
+   Tokens
+   ========================================================================== */
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces — layered, each step a little lighter than the last. */
+  --bg:          #0a0b0f;
+  --surface-1:   #101219;
+  --surface-2:   #171a23;
+  --surface-3:   #1e222d;
+
+  --line:        rgba(255, 255, 255, 0.07);
+  --line-strong: rgba(255, 255, 255, 0.13);
+
+  --ink-1:       #f4f6fa;
+  --ink-2:       #a5adbe;
+  --ink-3:       #6c7382;
+
+  /* Status roles. Validated for contrast and CVD separation against --bg.
+     Each is always paired with an icon and a word, never colour alone. */
+  --emerald:     #10b981;
+  --red:         #ff4459;
+  --red-ink:     #ff8f9c;
+  --amber:       #f5a524;
+
+  --emerald-a12: rgba(16, 185, 129, 0.12);
+  --emerald-a30: rgba(16, 185, 129, 0.30);
+  --red-a10:     rgba(255, 68, 89, 0.10);
+  --red-a45:     rgba(255, 68, 89, 0.45);
+  --amber-a12:   rgba(245, 165, 36, 0.12);
+  --amber-a45:   rgba(245, 165, 36, 0.45);
+
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+
+  --shadow-card:  0 1px 2px rgba(0,0,0,0.5), 0 12px 32px -16px rgba(0,0,0,0.9);
+  --shadow-block: 0 0 0 1px var(--red-a45),
+                  0 0 44px -10px rgba(255, 68, 89, 0.55),
+                  0 12px 32px -16px rgba(0,0,0,0.9);
+
+  --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --bar-h: 132px;
+  --ease:  cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { box-sizing: border-box; }
+
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink-1);
+  font-family: var(--sans);
+  font-size: 1rem;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Ambient depth. Two soft cool pools keep the near-black from reading flat. */
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(1000px 520px at 50% -12%, rgba(56, 189, 248, 0.065), transparent 72%),
+    radial-gradient(680px 420px at 88% 2%,  rgba(139, 92, 246, 0.05),  transparent 72%);
+}
+
+/* Fades in once anything has been blocked, tinting the whole room red. */
+.alert-glow {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 900ms ease;
+  background: radial-gradient(1100px 560px at 50% -14%, rgba(255, 68, 89, 0.13), transparent 72%);
+}
+
+body.is-breached .alert-glow { opacity: 1; }
+
+.shell {
+  position: relative;
+  z-index: 1;
+}
+
+.inner {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* ==========================================================================
+   Command bar — brand, live counts, connection. Pinned so the numbers never
+   leave the screen while the feed scrolls.
+   ========================================================================== */
+
+.command-bar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: rgba(10, 11, 15, 0.78);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid var(--line);
+}
+
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  height: 76px;
+}
+
+/* --- brand --- */
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  flex: none;
+}
+
+.brand__mark {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 9px;
+  background: linear-gradient(145deg, var(--surface-3), var(--surface-1));
+  border: 1px solid var(--line-strong);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+  display: grid;
+  place-items: center;
+}
+
+.brand__mark::after {
+  content: "";
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  background: linear-gradient(145deg, var(--emerald), #0b8f65);
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.65);
+  transition: background 500ms ease, box-shadow 500ms ease;
+}
+
+body.is-breached .brand__mark::after {
+  background: linear-gradient(145deg, var(--red), #c8203a);
+  box-shadow: 0 0 16px rgba(255, 68, 89, 0.75);
+}
+
+.brand__name {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  line-height: 1.1;
+}
+
+.brand__tag {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* --- counters --- */
+
+.counters {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin-left: auto;
+}
+
+.counter {
+  position: relative;
+  padding: 0 22px;
+  min-width: 104px;
+  border-left: 1px solid var(--line);
+}
+
+.counter:first-child { border-left: 0; }
+
+.counter__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.counter__label i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-3);
+  flex: none;
+}
+
+.counter--allow .counter__label i { background: var(--emerald); }
+.counter--block .counter__label i { background: var(--red); }
+
+.counter__value {
+  display: block;
+  margin-top: 1px;
+  font-size: 1.85rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  transition: color 400ms ease, text-shadow 400ms ease;
+}
+
+.counter--allow .counter__value { color: var(--emerald); }
+.counter--block .counter__value { color: var(--ink-3); }
+
+.counter--block.is-hot .counter__value {
+  color: var(--red);
+  text-shadow: 0 0 26px rgba(255, 68, 89, 0.6);
+}
+
+@keyframes tick {
+  0%   { transform: translateY(0) scale(1); }
+  35%  { transform: translateY(-2px) scale(1.07); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+.counter__value.is-ticking { animation: tick 420ms var(--ease); }
+
+/* --- connection pill --- */
+
+.conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  flex: none;
+  height: 36px;
+  padding: 0 15px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  box-shadow: var(--shadow-card);
+  transition: color 300ms ease, border-color 300ms ease;
+}
+
+.conn__dot {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--ink-3);
+}
+
+.conn__dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: inherit;
+}
+
+@keyframes halo {
+  0%   { transform: scale(1);   opacity: 0.7; }
+  70%  { transform: scale(3.2); opacity: 0; }
+  100% { transform: scale(3.2); opacity: 0; }
+}
+
+@keyframes throb { 50% { opacity: 0.3; } }
+
+.conn[data-state="connected"] { color: var(--emerald); border-color: var(--emerald-a30); }
+.conn[data-state="connected"] .conn__dot { background: var(--emerald); }
+.conn[data-state="connected"] .conn__dot::after { animation: halo 2.4s ease-out infinite; }
+
+.conn[data-state="connecting"],
+.conn[data-state="reconnecting"] { color: var(--amber); border-color: var(--amber-a45); }
+.conn[data-state="connecting"] .conn__dot,
+.conn[data-state="reconnecting"] .conn__dot { background: var(--amber); animation: throb 1.1s ease-in-out infinite; }
+
+.conn[data-state="disconnected"] { color: var(--red); border-color: var(--red-a45); }
+.conn[data-state="disconnected"] .conn__dot { background: var(--red); }
+
+/* Indeterminate sweep along the bottom of the bar while the link is down. */
+.link-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 250ms ease;
+}
+
+body:not([data-link="connected"]) .link-bar { opacity: 1; }
+
+.link-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 30%;
+  background: linear-gradient(90deg, transparent, var(--amber), transparent);
+  animation: sweep 1.5s ease-in-out infinite;
+}
+
+@keyframes sweep {
+  0%   { transform: translateX(-120%); }
+  100% { transform: translateX(430%); }
+}
+
+/* ==========================================================================
+   Filter row
+   ========================================================================== */
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 10px 14px;
+  flex-wrap: wrap;
+  height: 56px;
+  border-top: 1px solid var(--line);
+}
+
+.field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.field.is-hidden { display: none; }
+
+.field select {
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-1);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.field select:hover { border-color: var(--line-strong); background: var(--surface-3); }
+.field select:focus-visible { outline: 2px solid var(--emerald); outline-offset: 1px; }
+
+.seg {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.seg button {
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-sm);
+  padding: 5px 13px;
+  cursor: pointer;
+  transition: color 160ms ease, background 160ms ease;
+}
+
+.seg button:hover { color: var(--ink-1); background: rgba(255,255,255,0.04); }
+.seg button:focus-visible { outline: 2px solid var(--emerald); outline-offset: 1px; }
+
+.seg button[aria-pressed="true"] {
+  color: var(--ink-1);
+  background: var(--surface-3);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.07), 0 1px 2px rgba(0,0,0,0.4);
+}
+
+.seg button[data-verdict="allow"][aria-pressed="true"] { color: var(--emerald); }
+.seg button[data-verdict="block"][aria-pressed="true"] { color: var(--red); }
+
+.filters__spacer { margin-left: auto; }
+
+.showing {
+  font-size: 0.78rem;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ghost-btn {
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 6px 13px;
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.ghost-btn:hover { color: var(--ink-1); border-color: var(--line-strong); background: var(--surface-2); }
+.ghost-btn:focus-visible { outline: 2px solid var(--emerald); outline-offset: 1px; }
+
+/* ==========================================================================
+   Feed
+   ========================================================================== */
+
+.feed {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px 0 96px;
+}
+
+.ev {
+  position: relative;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.008)),
+    var(--surface-1);
+  box-shadow: var(--shadow-card);
+  padding: 14px 18px 14px 22px;
+  overflow: hidden;
+  transition: border-color 200ms ease, transform 200ms var(--ease);
+}
+
+.ev:hover { border-color: var(--line-strong); }
+
+/* Thin left accent bar, colour carries the state. */
+.ev__accent {
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--ink-3);
+}
+
+.ev__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  padding: 4px 9px;
+  border-radius: var(--r-sm);
+  white-space: nowrap;
+}
+
+.badge__icon { font-size: 0.85em; line-height: 1; }
+
+.tool {
+  font-family: var(--mono);
+  font-size: 0.98rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink-1);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 0.76rem;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.chip b {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.ev__time {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+  color: var(--ink-3);
+  white-space: nowrap;
+  padding-left: 8px;
+}
+
+.ev__reason {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+
+.rule {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+.ev__args {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--ink-2);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 9px 12px;
+  margin: 10px 0 0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.redacted {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--sans);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--amber);
+  background: var(--amber-a12);
+  border: 1px solid var(--amber-a45);
+  border-radius: 5px;
+  padding: 1px 7px;
+  margin: 0 2px;
+  vertical-align: 1px;
+}
+
+.redacted::before { content: "⬤"; font-size: 0.5em; opacity: 0.9; }
+
+/* --- allowed: calm, recessive; it is the background hum --- */
+
+.ev--allow .ev__accent { background: var(--emerald); }
+
+.ev--allow .badge {
+  color: var(--emerald);
+  background: var(--emerald-a12);
+  box-shadow: inset 0 0 0 1px var(--emerald-a30);
+}
+
+/* --- flagged --- */
+
+.ev--flag .ev__accent { background: var(--amber); }
+
+.ev--flag .badge {
+  color: var(--amber);
+  background: var(--amber-a12);
+  box-shadow: inset 0 0 0 1px var(--amber-a45);
+}
+
+.ev--flag .ev__reason { color: var(--amber); }
+
+/* --- blocked: the focal point of the entire demo --- */
+
+.ev--block {
+  border-color: var(--red-a45);
+  background:
+    linear-gradient(180deg, rgba(255, 68, 89, 0.10), rgba(255, 68, 89, 0.025)),
+    var(--surface-1);
+  box-shadow: var(--shadow-block);
+}
+
+.ev--block .ev__accent {
+  background: var(--red);
+  box-shadow: 0 0 14px rgba(255, 68, 89, 0.9);
+}
+
+.ev--block .badge {
+  color: #fff;
+  background: linear-gradient(180deg, #ff5c6e, var(--red));
+  box-shadow: 0 1px 8px rgba(255, 68, 89, 0.55);
+  font-size: 0.72rem;
+  padding: 5px 11px;
+}
+
+.ev--block .tool { font-size: 1.06rem; font-weight: 700; }
+
+.ev--block .ev__reason { color: var(--red-ink); font-size: 1.02rem; font-weight: 700; }
+
+.ev--block .ev__args { border-color: rgba(255, 68, 89, 0.28); }
+
+/* ==========================================================================
+   Empty state
+   ========================================================================== */
+
+.empty {
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  text-align: center;
+  padding: 100px 24px;
+}
+
+/* An explicit display would otherwise beat the `hidden` attribute. */
+.empty[hidden] { display: none; }
+
+.empty__ring {
+  position: relative;
+  width: 62px;
+  height: 62px;
+  margin-bottom: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: linear-gradient(160deg, var(--surface-2), var(--surface-1));
+  display: grid;
+  place-items: center;
+  font-size: 1.35rem;
+  box-shadow: var(--shadow-card);
+}
+
+.empty__ring::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  border: 1px solid var(--emerald-a30);
+  animation: halo 3s ease-out infinite;
+}
+
+.empty__title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink-1);
+}
+
+.empty__sub {
+  font-size: 0.88rem;
+  color: var(--ink-3);
+  max-width: 46ch;
+}
+
+/* ==========================================================================
+   Motion
+   ========================================================================== */
+
+@keyframes enter {
+  from { opacity: 0; transform: translateY(-14px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes pulse-block {
+  0%, 100% { box-shadow: var(--shadow-block); }
+  40%      { box-shadow: 0 0 0 2px var(--red),
+                         0 0 70px -4px rgba(255, 68, 89, 0.8),
+                         0 12px 32px -16px rgba(0,0,0,0.9); }
+}
+
+.is-new { animation: enter 440ms var(--ease); }
+.ev--block.is-new { animation: enter 440ms var(--ease), pulse-block 1s ease-in-out 220ms 2; }
+
+/* One quick wash across the room the instant a block lands. */
+.flash {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(255, 68, 89, 0.5) 100%);
+}
+
+.flash.is-firing { animation: wash 700ms ease-out; }
+
+@keyframes wash {
+  0%   { opacity: 0; }
+  22%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+@media (max-width: 1080px) {
+  .counter { min-width: 88px; padding: 0 16px; }
+  .counter__value { font-size: 1.6rem; }
+}
+
+@media (max-width: 860px) {
+  .inner { padding: 0 16px; }
+  .bar-row { height: auto; padding: 14px 0; flex-wrap: wrap; gap: 14px; }
+  .counters { margin-left: 0; order: 3; width: 100%; }
+  .counter:first-child { padding-left: 0; }
+  .conn { margin-left: auto; }
+  .filters { height: auto; padding: 12px 0; }
+  .filters__spacer { margin-left: 0; }
+}
+
+@media (max-width: 560px) {
+  .brand__tag { display: none; }
+  .counter { min-width: 0; flex: 1; padding: 0 10px; }
+  .counter__value { font-size: 1.4rem; }
+  .ev__time { margin-left: 0; padding-left: 0; width: 100%; }
+}
+</style>
+</head>
+<body data-link="connecting">
+
+<div class="ambient" aria-hidden="true"></div>
+<div class="alert-glow" aria-hidden="true"></div>
+<div class="flash" id="flash" aria-hidden="true"></div>
+
+<div class="shell">
+
+  <div class="command-bar">
+    <div class="inner">
+
+      <div class="bar-row">
+        <div class="brand">
+          <div class="brand__mark" aria-hidden="true"></div>
+          <div>
+            <h1 class="brand__name">AIRLOCK</h1>
+            <span class="brand__tag">MCP Security Checkpoint</span>
+          </div>
+        </div>
+
+        <div class="counters" role="group" aria-label="Event totals">
+          <div class="counter">
+            <div class="counter__label"><i aria-hidden="true"></i>Events</div>
+            <span class="counter__value" id="stat-total" data-value="0">0</span>
+          </div>
+          <div class="counter counter--allow">
+            <div class="counter__label"><i aria-hidden="true"></i>Allowed</div>
+            <span class="counter__value" id="stat-allow" data-value="0">0</span>
+          </div>
+          <div class="counter counter--block" id="counter-block">
+            <div class="counter__label"><i aria-hidden="true"></i>Blocked</div>
+            <span class="counter__value" id="stat-block" data-value="0">0</span>
+          </div>
+        </div>
+
+        <div class="conn" id="conn" data-state="connecting" role="status" aria-live="polite">
+          <span class="conn__dot" aria-hidden="true"></span>
+          <span id="conn-text">Connecting</span>
+        </div>
+      </div>
+
+      <div class="filters" aria-label="Filters">
+        <label class="field">Agent
+          <select id="filter-agent"><option value="">All</option></select>
+        </label>
+
+        <!-- Workspace is not part of the documented event payload, so this
+             control stays hidden until events actually carry the field. -->
+        <label class="field is-hidden" id="field-workspace">Workspace
+          <select id="filter-workspace"><option value="">All</option></select>
+        </label>
+
+        <div class="seg" id="filter-verdict" role="group" aria-label="Decision">
+          <button type="button" data-verdict=""      aria-pressed="true">All</button>
+          <button type="button" data-verdict="allow" aria-pressed="false">Allowed</button>
+          <button type="button" data-verdict="block" aria-pressed="false">Blocked</button>
+          <button type="button" data-verdict="flag"  aria-pressed="false">Flagged</button>
+        </div>
+
+        <div class="filters__spacer"></div>
+        <span class="showing" id="showing" hidden></span>
+        <button type="button" class="ghost-btn" id="clear-view">Clear view</button>
+      </div>
+
+      <div class="link-bar" aria-hidden="true"></div>
+    </div>
+  </div>
+
+  <div class="inner">
+    <main class="feed" id="feed"></main>
+
+    <div class="empty" id="empty">
+      <div class="empty__ring" aria-hidden="true">🛡️</div>
+      <div class="empty__title">Awaiting tool calls</div>
+      <p class="empty__sub" id="empty-sub">
+        Airlock is inline and watching. Every decision appears here the moment an
+        agent reaches for a tool.
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  const MAX_EVENTS   = 500;   // matches the hub's AIRLOCK_MAX_EVENTS default
+  const POLL_AFTER   = 3;     // failed socket attempts before REST fallback
+  const POLL_EVERY   = 5000;
+  const BACKOFF_BASE = 500;
+  const BACKOFF_MAX  = 30000;
+  const GIVE_UP_AT   = 6;     // attempts before the pill reads "disconnected"
+
+  const VERDICTS = {
+    allow: { label: "ALLOWED", icon: "✓" },
+    block: { label: "BLOCKED", icon: "✕" },
+    flag:  { label: "FLAGGED", icon: "▲" },
+  };
+
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const params = new URLSearchParams(location.search);
+
+  // Served from the hub itself in normal use; the fallback lets the file be
+  // opened straight off disk during frontend work.
+  const HOST   = params.get("host") || location.host || "127.0.0.1:8000";
+  const SECURE = location.protocol === "https:";
+
+  // The hub authenticates ingestion only today, so this is usually unset.
+  // Browsers cannot set headers on a WebSocket, so the token rides as a query
+  // parameter there and as a bearer header on the REST fallback.
+  const TOKEN = params.get("token") || localStorage.getItem("airlock_token") || "";
+
+  const el = {
+    conn:        document.getElementById("conn"),
+    connText:    document.getElementById("conn-text"),
+    total:       document.getElementById("stat-total"),
+    allow:       document.getElementById("stat-allow"),
+    block:       document.getElementById("stat-block"),
+    blockTile:   document.getElementById("counter-block"),
+    agent:       document.getElementById("filter-agent"),
+    workspace:   document.getElementById("filter-workspace"),
+    wsField:     document.getElementById("field-workspace"),
+    verdict:     document.getElementById("filter-verdict"),
+    feed:        document.getElementById("feed"),
+    empty:       document.getElementById("empty"),
+    emptyTitle:  document.querySelector(".empty__title"),
+    emptySub:    document.getElementById("empty-sub"),
+    showing:     document.getElementById("showing"),
+    flash:       document.getElementById("flash"),
+    clear:       document.getElementById("clear-view"),
+  };
+
+  const state = {
+    events: [],                                   // newest first
+    filters: { agent: "", workspace: "", verdict: "" },
+    socket: null,
+    attempt: 0,
+    retryTimer: null,
+    countdownTimer: null,
+    pollTimer: null,
+  };
+
+  /* ---------------------------------------------------------------- transport */
+
+  const httpUrl = (path) => `${SECURE ? "https:" : "http:"}//${HOST}${path}`;
+
+  function socketUrl() {
+    const base = `${SECURE ? "wss:" : "ws:"}//${HOST}/ws`;
+    return TOKEN ? `${base}?token=${encodeURIComponent(TOKEN)}` : base;
+  }
+
+  function connect() {
+    clearTimeout(state.retryTimer);
+    clearInterval(state.countdownTimer);
+    setStatus(state.attempt === 0 ? "connecting" : "reconnecting");
+
+    let socket;
+    try {
+      socket = new WebSocket(socketUrl());
+    } catch (err) {
+      scheduleReconnect();
+      return;
+    }
+    state.socket = socket;
+
+    socket.onopen = () => {
+      state.attempt = 0;
+      stopPolling();
+      setStatus("connected");
+    };
+
+    socket.onmessage = (message) => {
+      let payload;
+      try {
+        payload = JSON.parse(message.data);
+      } catch (err) {
+        return;
+      }
+      if (payload.type === "snapshot") {
+        replaceAll(payload.events || []);
+      } else if (payload.type === "event" && payload.event) {
+        pushEvent(payload.event);
+      }
+    };
+
+    socket.onclose = () => {
+      state.socket = null;
+      scheduleReconnect();
+    };
+
+    // A failed handshake fires error then close; recovery is handled on close.
+    socket.onerror = () => {};
+  }
+
+  function scheduleReconnect() {
+    state.attempt += 1;
+    if (state.attempt >= POLL_AFTER) startPolling();
+
+    const delay = Math.min(BACKOFF_MAX, BACKOFF_BASE * 2 ** (state.attempt - 1));
+    const kind = state.attempt > GIVE_UP_AT ? "disconnected" : "reconnecting";
+    let remaining = Math.ceil(delay / 1000);
+
+    setStatus(kind, remaining);
+    clearInterval(state.countdownTimer);
+    state.countdownTimer = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearInterval(state.countdownTimer);
+        return;
+      }
+      setStatus(kind, remaining);
+    }, 1000);
+
+    state.retryTimer = setTimeout(connect, delay);
+  }
+
+  function startPolling() {
+    if (state.pollTimer) return;
+    const poll = async () => {
+      try {
+        const headers = TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {};
+        const response = await fetch(httpUrl("/api/events"), { headers });
+        if (response.ok) {
+          const body = await response.json();
+          replaceAll(body.events || []);
+        }
+      } catch (err) {
+        /* the socket retry loop owns recovery */
+      }
+    };
+    poll();
+    state.pollTimer = setInterval(poll, POLL_EVERY);
+  }
+
+  function stopPolling() {
+    clearInterval(state.pollTimer);
+    state.pollTimer = null;
+  }
+
+  function setStatus(kind, seconds) {
+    el.conn.dataset.state = kind;
+    document.body.dataset.link = kind;
+    el.connText.textContent = {
+      connected:    "Connected",
+      connecting:   "Connecting",
+      reconnecting: seconds ? `Reconnecting · ${seconds}s` : "Reconnecting",
+      disconnected: seconds ? `Disconnected · retry ${seconds}s` : "Disconnected",
+    }[kind];
+  }
+
+  /* -------------------------------------------------------------------- data */
+
+  function replaceAll(list) {
+    // The hub stores history oldest-first; the feed reads newest-first.
+    state.events = list.slice().reverse().slice(0, MAX_EVENTS);
+    render();
+  }
+
+  function pushEvent(event) {
+    state.events.unshift(event);
+    if (state.events.length > MAX_EVENTS) state.events.length = MAX_EVENTS;
+
+    updateStats();
+    updateFilterOptions();
+
+    if (matchesFilters(event)) {
+      el.feed.prepend(card(event, true));
+      while (el.feed.children.length > MAX_EVENTS) el.feed.lastElementChild.remove();
+    }
+    updateVisibility();
+
+    if (event.verdict === "block") fireFlash();
+  }
+
+  function matchesFilters(event) {
+    const { agent, workspace, verdict } = state.filters;
+    if (agent && event.agent_id !== agent) return false;
+    if (workspace && event.workspace !== workspace) return false;
+    if (verdict && event.verdict !== verdict) return false;
+    return true;
+  }
+
+  /* --------------------------------------------------------------- rendering */
+
+  function formatTime(iso) {
+    const parsed = new Date(iso);
+    if (Number.isNaN(parsed.getTime())) return String(iso ?? "");
+    return parsed.toLocaleTimeString([], {
+      hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit",
+    });
+  }
+
+  function chip(label, value) {
+    const node = document.createElement("span");
+    node.className = "chip";
+    const key = document.createElement("b");
+    key.textContent = label;
+    node.append(key, document.createTextNode(value));
+    return node;
+  }
+
+  // args_preview arrives already redacted by the proxy. Marking every
+  // [REDACTED] span shows the audience that scrubbing happened, rather than
+  // letting them assume there was nothing sensitive there.
+  function renderArgs(preview) {
+    const fragment = document.createDocumentFragment();
+    String(preview ?? "").split("[REDACTED]").forEach((chunk, index) => {
+      if (index > 0) {
+        const marker = document.createElement("span");
+        marker.className = "redacted";
+        marker.textContent = "REDACTED";
+        fragment.append(marker);
+      }
+      if (chunk) fragment.append(document.createTextNode(chunk));
+    });
+    return fragment;
+  }
+
+  function card(event, isNew) {
+    const verdict = VERDICTS[event.verdict] ? event.verdict : "flag";
+    const meta = VERDICTS[verdict];
+
+    const article = document.createElement("article");
+    article.className = `ev ev--${verdict}${isNew ? " is-new" : ""}`;
+
+    const accent = document.createElement("span");
+    accent.className = "ev__accent";
+    accent.setAttribute("aria-hidden", "true");
+
+    const row = document.createElement("div");
+    row.className = "ev__row";
+
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    const icon = document.createElement("span");
+    icon.className = "badge__icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = meta.icon;
+    badge.append(icon, document.createTextNode(meta.label));
+
+    const tool = document.createElement("span");
+    tool.className = "tool";
+    tool.textContent = event.tool_name ?? "unknown";
+
+    row.append(badge, tool, chip("agent", event.agent_id ?? "—"));
+    if (event.workspace) row.append(chip("workspace", event.workspace));
+    if (verdict !== "allow" && event.severity) row.append(chip("severity", event.severity));
+
+    const time = document.createElement("time");
+    time.className = "ev__time";
+    time.dateTime = event.time ?? "";
+    time.title = event.time ?? "";
+    time.textContent = formatTime(event.time);
+    row.append(time);
+
+    article.append(accent, row);
+
+    // Every allowed call carries the same placeholder reason, so printing it
+    // on each green row would only dilute the blocked ones.
+    if (verdict !== "allow" && event.reason) {
+      const reason = document.createElement("div");
+      reason.className = "ev__reason";
+      reason.append(document.createTextNode(event.reason));
+      if (event.rule_id) {
+        const rule = document.createElement("span");
+        rule.className = "rule";
+        rule.textContent = event.rule_id;
+        reason.append(rule);
+      }
+      article.append(reason);
+    }
+
+    const args = document.createElement("pre");
+    args.className = "ev__args";
+    args.append(renderArgs(event.args_preview));
+    article.append(args);
+
+    return article;
+  }
+
+  function render() {
+    updateStats();
+    updateFilterOptions();
+
+    const visible = state.events.filter(matchesFilters);
+    const fragment = document.createDocumentFragment();
+    visible.forEach((event) => fragment.append(card(event, false)));
+
+    el.feed.replaceChildren(fragment);
+    updateVisibility(visible.length);
+  }
+
+  function updateVisibility(visibleCount) {
+    const shown = visibleCount ?? el.feed.children.length;
+    const total = state.events.length;
+
+    el.empty.hidden = shown > 0;
+    if (total === 0) {
+      el.emptyTitle.textContent = "Awaiting tool calls";
+      el.emptySub.textContent =
+        "Airlock is inline and watching. Every decision appears here the moment " +
+        "an agent reaches for a tool.";
+    } else if (shown === 0) {
+      el.emptyTitle.textContent = "No matching events";
+      el.emptySub.textContent =
+        `None of the ${total} recorded events match the current filters.`;
+    }
+
+    const filtered = shown !== total;
+    el.showing.hidden = !filtered;
+    if (filtered) el.showing.textContent = `${shown} of ${total}`;
+  }
+
+  function animateCount(node, next) {
+    const previous = Number(node.dataset.value || 0);
+    if (previous === next) return;
+    node.dataset.value = String(next);
+
+    if (reducedMotion || Math.abs(next - previous) > 40) {
+      node.textContent = String(next);
+    } else {
+      const started = performance.now();
+      const duration = 420;
+      const step = (now) => {
+        const t = Math.min(1, (now - started) / duration);
+        const eased = 1 - Math.pow(1 - t, 3);
+        node.textContent = String(Math.round(previous + (next - previous) * eased));
+        if (t < 1) requestAnimationFrame(step);
+        else node.textContent = String(next);
+      };
+      requestAnimationFrame(step);
+    }
+
+    node.classList.remove("is-ticking");
+    void node.offsetWidth;                     // restart the tick animation
+    node.classList.add("is-ticking");
+  }
+
+  function updateStats() {
+    let allow = 0, block = 0;
+    state.events.forEach((event) => {
+      if (event.verdict === "allow") allow += 1;
+      else if (event.verdict === "block") block += 1;
+    });
+
+    animateCount(el.total, state.events.length);
+    animateCount(el.allow, allow);
+    animateCount(el.block, block);
+
+    el.blockTile.classList.toggle("is-hot", block > 0);
+    document.body.classList.toggle("is-breached", block > 0);
+  }
+
+  function updateFilterOptions() {
+    fillSelect(el.agent, unique("agent_id"), "agent");
+    const workspaces = unique("workspace");
+    el.wsField.classList.toggle("is-hidden", workspaces.length === 0);
+    fillSelect(el.workspace, workspaces, "workspace");
+  }
+
+  function unique(field) {
+    return [...new Set(state.events.map((event) => event[field]).filter(Boolean))].sort();
+  }
+
+  function fillSelect(select, values, key) {
+    const current = state.filters[key];
+    const existing = [...select.options].slice(1).map((option) => option.value);
+    if (existing.length === values.length && existing.every((v, i) => v === values[i])) return;
+
+    select.replaceChildren(new Option("All", ""));
+    values.forEach((value) => select.append(new Option(value, value)));
+    select.value = values.includes(current) ? current : "";
+    if (select.value !== current) state.filters[key] = select.value;
+  }
+
+  function fireFlash() {
+    if (reducedMotion) return;
+    el.flash.classList.remove("is-firing");
+    void el.flash.offsetWidth;                 // restart the wash
+    el.flash.classList.add("is-firing");
+  }
+
+  /* ------------------------------------------------------------------ wiring */
+
+  el.agent.addEventListener("change", () => {
+    state.filters.agent = el.agent.value;
+    render();
+  });
+
+  el.workspace.addEventListener("change", () => {
+    state.filters.workspace = el.workspace.value;
+    render();
+  });
+
+  el.verdict.addEventListener("click", (clickEvent) => {
+    const button = clickEvent.target.closest("button[data-verdict]");
+    if (!button) return;
+    state.filters.verdict = button.dataset.verdict;
+    [...el.verdict.children].forEach((child) => {
+      child.setAttribute("aria-pressed", String(child === button));
+    });
+    render();
+  });
+
+  // Local only — clears the view for a rehearsal without touching hub history.
+  el.clear.addEventListener("click", () => {
+    state.events = [];
+    render();
+  });
+
+  connect();
+})();
+</script>
+</body>
+</html>
