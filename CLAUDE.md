@@ -65,7 +65,7 @@ depth.
 - `airlock/config.py`: environment-backed process configuration.
 - `demo/upstream_server.py`: deliberately constrained MCP tools.
 - `demo/smoke_test.py`: deterministic end-to-end verification.
-- `dashboard/index.html`: frontend owned by the frontend teammate.
+- `dashboard/index.html`: live zero-build operator UI.
 
 ## Policy order
 

@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "airlock-cursor": {
+      "type": "stdio",
+      "command": "${workspaceFolder}/airlock-proxy.sh",
+      "env": {
+        "AIRLOCK_AGENT_ID": "cursor-agent",
+        "AIRLOCK_WORKSPACE": "${workspaceFolder}/demo/workspace_a",
+        "AIRLOCK_EVENT_URL": "http://127.0.0.1:8000/api/events"
+      }
+    }
+  }
+}
