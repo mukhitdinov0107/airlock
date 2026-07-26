@@ -14,6 +14,7 @@ from airlock.events import SecurityEvent
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+LANDING_FILE = PROJECT_ROOT / "landing" / "index.html"
 DASHBOARD_FILE = PROJECT_ROOT / "dashboard" / "index.html"
 EVENT_TOKEN = os.getenv("AIRLOCK_EVENT_TOKEN")
 MAX_EVENTS = int(os.getenv("AIRLOCK_MAX_EVENTS", "500"))
@@ -40,6 +41,18 @@ async def _broadcast(event: SecurityEvent) -> None:
 
 
 @app.get("/", response_model=None)
+async def landing() -> FileResponse | JSONResponse:
+    if LANDING_FILE.exists():
+        return FileResponse(LANDING_FILE)
+    return JSONResponse(
+        {
+            "service": "airlock-event-hub",
+            "message": "Landing page not installed.",
+        }
+    )
+
+
+@app.get("/dashboard", response_model=None)
 async def dashboard() -> FileResponse | JSONResponse:
     if DASHBOARD_FILE.exists():
         return FileResponse(DASHBOARD_FILE)

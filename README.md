@@ -155,7 +155,9 @@ npm install
 npm run dev
 ```
 
-Open the live dashboard at [http://127.0.0.1:8000](http://127.0.0.1:8000).
+Open the landing page at [http://127.0.0.1:8000](http://127.0.0.1:8000) and
+the live dashboard at
+[http://127.0.0.1:8000/dashboard](http://127.0.0.1:8000/dashboard).
 The first run opens Hexclave's local onboarding for the enterprise Teams, RBAC,
 team API Keys, and Analytics configuration in `hexclave.config.ts`. Use
 `npm run dev:airlock` only when you intentionally want to run Airlock without
